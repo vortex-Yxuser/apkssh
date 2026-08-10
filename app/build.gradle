@@ -1,0 +1,76 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.example.sshpayloadvpn'
+    compileSdk 34
+    ndkVersion "25.2.9519653"
+
+    defaultConfig {
+        applicationId "com.example.sshpayloadvpn"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    // مكتبة tun2socks (hev-socks5-tunnel) المُجمَّعة أدناه (Exec tasks) تضع
+    // ملفات libhev-socks5-tunnel.so هنا، ونضيف هذا المسار كمصدر jniLibs
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['libs']
+        }
+    }
+}
+
+// -----------------------------------------------------------------------
+// تحميل وبناء tun2socks (hev-socks5-tunnel) تلقائياً في كل بناء — محلياً
+// عبر Android Studio أو تلقائياً عند البناء على GitHub Actions — بلا أي
+// خطوة يدوية من طرفك.
+// -----------------------------------------------------------------------
+tasks.register('fetchTun2socks', Exec) {
+    onlyIf { !file("${projectDir}/jni/hev-socks5-tunnel/Android.mk").exists() }
+    commandLine 'git', 'clone', '--recursive', '--depth', '1',
+            'https://github.com/heiher/hev-socks5-tunnel',
+            "${projectDir}/jni/hev-socks5-tunnel"
+}
+
+tasks.register('buildTun2socks', Exec) {
+    dependsOn 'fetchTun2socks'
+    doFirst {
+        def ndkDir = android.ndkDirectory
+        def ndkBuildExe = new File(ndkDir, System.getenv('OS')?.contains('Windows') ? 'ndk-build.cmd' : 'ndk-build')
+        commandLine "${ndkBuildExe}", '-C', projectDir, "-j${Runtime.runtime.availableProcessors()}"
+    }
+}
+
+preBuild.dependsOn buildTun2socks
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.12.0'
+
+    // JSch: مكتبة بروتوكول SSH بلغة Java/Kotlin (تُستخدم لإنشاء نفق SSH وقناة SOCKS الديناميكية)
+    // ملاحظة: مكتبة jcraft الأصلية متوقفة عن التطوير، ولمزيد من التوافق مع خوارزميات SSH الحديثة
+    // (ed25519, rsa-sha2-256, aes-gcm...) يفضّل استبدالها بـ:
+    // implementation 'com.github.mwiede:jsch:0.2.17'  (عبر jitpack، مذكور في settings.gradle)
+    implementation 'com.jcraft:jsch:0.1.55'
+}

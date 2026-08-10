@@ -1,0 +1,15 @@
+*.iml
+.gradle/
+/local.properties
+.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+app/build/
+
+# يُجلب تلقائياً بواسطة مهمة Gradle (fetchTun2socks) في كل بناء
+app/jni/hev-socks5-tunnel/
+app/libs/
+app/obj/

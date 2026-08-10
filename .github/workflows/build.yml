@@ -1,0 +1,40 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager --install "ndk;25.2.9519653"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # ملاحظة: لا حاجة لخطوة تحميل tun2socks هنا يدوياً — مهمة Gradle
+      # "fetchTun2socks" المعرّفة في app/build.gradle تقوم بذلك تلقائياً
+      # (وكذلك تبنيه عبر ndk-build) كجزء من دورة البناء العادية.
+      - name: Build debug APK
+        run: gradle assembleDebug --stacktrace
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SSHPayloadVPN-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
