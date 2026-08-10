@@ -1,48 +1,72 @@
 package com.example.sshpayloadvpn
 
+import com.jcraft.jsch.SocketFactory
 import java.io.IOException
+import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+
 
 class PayloadSocketFactory(
     private val proxyHost: String,
     private val proxyPort: Int,
     private val payload: String,
     private val onLog: (String) -> Unit = {}
-) {
+) : SocketFactory {
 
-    fun createSocket(targetHost: String, targetPort: Int): Socket {
+
+    override fun createSocket(
+        host: String,
+        port: Int
+    ): Socket {
 
         val socket = Socket()
 
         try {
+
             onLog("Connecting proxy $proxyHost:$proxyPort")
 
+
             socket.connect(
-                InetSocketAddress(proxyHost, proxyPort),
-                10000
+                InetSocketAddress(
+                    proxyHost,
+                    proxyPort
+                ),
+                15000
             )
+
 
             onLog("Proxy connected")
 
-            val output = socket.getOutputStream()
 
-            val finalPayload = payload
-                .replace("[host]", targetHost)
-                .replace("[port]", targetPort.toString())
-                .replace("[host_port]", "$targetHost:$targetPort")
+            val request = payload
+                .replace("[host]", host)
+                .replace("[port]", port.toString())
+                .replace("[host_port]", "$host:$port")
                 .replace("[crlf]", "\r\n")
 
-            sendPayload(output, finalPayload)
+
+            val output = socket.getOutputStream()
+
+            output.write(
+                request.toByteArray(Charsets.UTF_8)
+            )
+
+            output.flush()
+
 
             onLog("Payload sent")
 
-            readHttpProxyResponse(socket)
 
-            onLog("Proxy CONNECT established")
+            checkProxyResponse(socket)
+
+
+            onLog("Tunnel established")
+
 
             return socket
+
 
         } catch (e: Exception) {
 
@@ -51,27 +75,18 @@ class PayloadSocketFactory(
             } catch (_: Exception) {
             }
 
-            onLog("Socket error: ${e.message}")
+            onLog(
+                "Connection failed: ${e.message}"
+            )
 
-            throw e
+            throw IOException(e)
+
         }
     }
 
 
-    private fun sendPayload(
-        output: OutputStream,
-        data: String
-    ) {
 
-        output.write(
-            data.toByteArray(Charsets.UTF_8)
-        )
-
-        output.flush()
-    }
-
-
-    private fun readHttpProxyResponse(
+    private fun checkProxyResponse(
         socket: Socket
     ) {
 
@@ -84,9 +99,9 @@ class PayloadSocketFactory(
 
         while (true) {
 
-            val length = input.read(buffer)
+            val count = input.read(buffer)
 
-            if (length <= 0) {
+            if (count <= 0) {
                 break
             }
 
@@ -96,15 +111,18 @@ class PayloadSocketFactory(
             )
 
 
-            if (response.toString()
-                    .endsWith("\r\n\r\n")) {
+            if (
+                response.endsWith(
+                    "\r\n\r\n"
+                )
+            ) {
                 break
             }
 
 
             if (response.length > 8192) {
                 throw IOException(
-                    "Proxy response too large"
+                    "Invalid proxy response"
                 )
             }
         }
@@ -113,13 +131,36 @@ class PayloadSocketFactory(
         val result = response.toString()
 
 
-        if (!result.startsWith("HTTP/1.1 200") &&
-            !result.startsWith("HTTP/1.0 200")
+        if (
+            !result.contains(
+                "200"
+            )
         ) {
 
             throw IOException(
-                "Proxy rejected CONNECT:\n$result"
+                "Proxy rejected:\n$result"
             )
         }
     }
+
+
+
+    override fun getInputStream(
+        socket: Socket
+    ): InputStream {
+
+        return socket.getInputStream()
+
+    }
+
+
+
+    override fun getOutputStream(
+        socket: Socket
+    ): OutputStream {
+
+        return socket.getOutputStream()
+
+    }
+
 }
